@@ -1,13 +1,13 @@
 # MPU9250 Kernel Driver for Raspberry Pi
 
-This project provides a Linux kernel driver for the **MPU9250**, a 9-axis MotionTracking device from Invensense (now TDK). The MPU9250 integrates a 3-axis accelerometer, 3-axis gyroscope, and 3-axis magnetometer, making it ideal for applications like motion sensing, orientation detection, and navigation in embedded systems such as drones, wearables, and IoT devices. The driver is tailored for Raspberry Pi, leveraging I2C communication, and includes advanced concurrency features, synchronization mechanisms, and comprehensive user-space tests.
+This project provides a Linux kernel driver for the **MPU9250**, a 9-axis MotionTracking device from Invensense (now TDK), tailored for Raspberry Pi. The MPU9250 integrates a 3-axis accelerometer, 3-axis gyroscope, and 3-axis magnetometer, ideal for motion sensing, orientation detection, and navigation in embedded systems like drones, wearables, and IoT devices. The driver leverages I2C communication and incorporates advanced concurrency, synchronization, file operations, system calls, library functions, blocking/non-blocking calls, atomic operations, race condition handling, user/kernel mode process management, POSIX threads, thread synchronization, inter-process communication (IPC), memory management, and signal handling.
 
 ## Table of Contents
 - [Introduction to the Sensor](#introduction-to-the-sensor)
 - [Features](#features)
 - [Code Structure](#code-structure)
 - [Build](#build)
-- [Installation](#installation)
+- [Install](#install)
 - [Usage](#usage)
 - [Expected Results](#expected-results)
 - [License](#license)
@@ -22,130 +22,139 @@ The **MPU9250** is a low-power, high-performance Inertial Measurement Unit (IMU)
 - **FIFO Buffer**: Hardware buffer for efficient data collection.
 - **Interrupts**: Supports data-ready, FIFO overflow, and DMP interrupts.
 
-The sensor communicates via I2C (default address 0x68) and is widely used in robotics, VR/AR, and stabilization systems. This driver exposes its functionality through `/dev/mpu9250`, sysfs attributes, and the Linux input subsystem.
+The sensor communicates via I2C (default address 0x68) and is widely used in robotics, VR/AR, and stabilization systems. This driver exposes functionality through `/dev/mpu9250`, sysfs attributes, and the Linux input subsystem.
 
 ## Features
 
-- **Kernel Integration**: I2C-based probe/remove, power management (suspend/resume), IRQ handling.
-- **Data Access**: Read accelerometer, gyroscope, magnetometer, and quaternion data via ioctl, read/write registers, FIFO/DMP support, and calibration.
-- **Concurrency**: Thread pools for parallel sensor reads, dynamic thread count, pause/resume threads.
-- **Synchronization**: Recursive mutexes, read-write locks, condition variables, semaphores, barriers, notifiers for Inter-Thread Communication (ITC), and deadlock detection/prevention.
-- **User-Space Tests**: Multi-threaded tests for sensor data (accel, gyro, mag, DMP) and IPC mechanisms (message queues, shared memory, FIFO, pipes) with signals, detached/joinable threads, and publisher-subscriber model.
-- **Device Tree Overlay**: Configurable via Device Tree Source (DTS) for I2C, interrupts, and threading parameters (e.g., num_threads, semaphore_type).
-- **Build and Documentation**: Makefile for building module, DTB, and tests, with Doxygen support and valgrind/helgrind for concurrency validation.
+- **Kernel Integration**: I2C-based probe/remove, power management, IRQ handling with atomic operations and race condition prevention.
+- **Data Access**: Read accelerometer, gyroscope, magnetometer, and DMP quaternion data via file operations (read/write/ioctl/poll/mmap) with blocking/non-blocking support.
+- **Concurrency**: Thread pools for parallel sensor reads, dynamic thread count, pause/resume, using POSIX threads (user space) and kthreads (kernel space).
+- **Synchronization**: Custom recursive mutexes, read-write locks, condition variables, semaphores, barriers, notifiers for Inter-Thread Communication (ITC), dining philosophers pattern, and deadlock detection/prevention.
+- **User-Space Tests**: Multi-threaded tests for sensor data and IPC (pipes, FIFO, POSIX message queues, semaphores, shared memory), with signal handling, detached/joinable threads, and publisher-subscriber model.
+- **Device Tree Overlay**: Configurable via Device Tree Source (DTS) for I2C, interrupts, and threading parameters.
+- **Build and Documentation**: Makefile for building with GNU-GCC, Doxygen support, and valgrind/helgrind for concurrency validation.
+- **Process Management**: Fork() system call, child-parent process handling, command line argument parsing, memory layout (code, data, stack, heap).
+- **Memory Management**: Kernel allocations (vmalloc, kzalloc), user-space malloc/mmap, and memory segment management.
+- **Signals**: Signal handlers, sending signals, and default signal behaviors.
 
 ## Code Structure
 
-The project consists of 8 files: 4 kernel driver files, 1 header, 2 user-space test programs, 1 Device Tree overlay, and 1 Makefile. Below is a detailed breakdown of each file, including the key knowledge and concepts applied.
+The project consists of 8 files: 4 kernel driver files, 1 header, 2 user-space test programs, 1 Device Tree overlay, and 1 Makefile. Below is a breakdown of each file, covering file operations, system calls, library functions, compiling with GNU-GCC, blocking/non-blocking calls, atomic operations, race conditions, user/kernel mode process management, POSIX threads, thread synchronization, IPC, memory management, and signals.
 
 ### mpu9250.h
-- **Purpose**: Defines constants, structs, enums, IOCTL commands, and function prototypes for the driver.
+- **Purpose**: Defines constants, structs, enums, IOCTL commands, and function prototypes.
 - **Key Features**:
-  - Structs: `mpu9250_data` (with thread_pool, sync primitives like rwlock_t, semaphore), `mpu9250_mq_data` (for accel/gyro/mag/quat).
-  - Enums: Scales (e.g., `ACCEL_SCALE_2G`), interrupts (e.g., `MPU9250_INTERRUPT_DATA_READY`).
-  - IOCTLs: For reading sensors, setting scales, calibration, thread control.
+  - Structs: `mpu9250_data` (thread_pool, rwlock_t, semaphore, atomic_t), `mpu9250_mq_data` (accel/gyro/mag/quat).
+  - Enums: Scales, interrupts.
+  - IOCTLs: Sensor reads, scale setting, calibration, thread control.
+  - Custom recursive mutex with atomic_t.
 - **Knowledge Used**:
-  - Linux kernel data structures (struct, atomic_t).
-  - Synchronization: mutex, rwlock, semaphore, notifier_head for ITC.
-  - Thread management: kthread structs.
-  - Atomic operations for deadlock detection.
-  - Ensures multi-instance support and concurrency safety.
+  - **File Operations/System Calls**: IOCTL definitions.
+  - **Library Functions**: Kernel memcpy, memset.
+  - **Atomic Operations**: atomic_t for deadlock detection.
+  - **Race Conditions**: Mutex, rwlock for synchronization.
+  - **Thread Synchronization**: recursive_mutex, rwlock_t, notifier_head.
+  - **Process Management**: Kthread structs.
+  - **Memory Management**: Data arrays (vmalloc).
 
 ### mpu9250_ops.c
-- **Purpose**: Implements core sensor operations: I2C read/write, initialization, FIFO/DMP setup, scale/sample rate configuration, data conversion, and calibration.
+- **Purpose**: Implements sensor operations: I2C read/write, initialization, FIFO/DMP setup, calibration.
 - **Key Features**:
-  - I2C communication using regmap for registers (e.g., WHO_AM_I, PWR_MGMT_1).
-  - FIFO/DMP initialization for efficient data handling.
-  - Calibration with cleanup handlers for deferred cancellation.
+  - I2C regmap communication.
+  - FIFO/DMP initialization.
+  - Calibration with dining philosophers (semaphores) and cleanup handlers.
 - **Knowledge Used**:
-  - Regmap API for I2C access.
-  - Kthread cancellation (deferred with cleanup handlers).
-  - Monitors (wait_event for resource availability).
-  - Deadlock checks (atomic counters, try_lock).
-  - Parallelism in calibration loops with interruptible waits.
-  - Ensures low-latency, real-time data processing.
+  - **File Operations/System Calls**: Regmap read/write.
+  - **Library Functions**: Kernel memcpy, dev_err.
+  - **Blocking Calls**: wait_event_interruptible.
+  - **Atomic Operations**: atomic_t for counters.
+  - **Race Conditions**: Semaphores, monitors.
+  - **Thread Synchronization**: wait_queue, semaphores.
+  - **Process Management**: Kthread cancellation.
+  - **Memory Management**: vmalloc for buffers.
 
 ### mpu9250_driver.c
-- **Purpose**: Core driver logic for probe/remove, sysfs attributes, thread pool management, power management, and input device registration.
+- **Purpose**: Core driver logic for probe/remove, sysfs attributes, thread pool, power management.
 - **Key Features**:
-  - Probes I2C device with Device Tree matching.
-  - Sysfs attrs for data/scale read/write.
-  - Thread pool for parallel reads, pause/resume, ITC via notifiers.
+  - I2C device probing.
+  - Sysfs attrs with rwlocks.
+  - Thread pool with ITC via notifiers.
 - **Knowledge Used**:
-  - I2C driver framework (probe/remove, DT match).
-  - Kthread creation/binding for multi-core parallelism.
-  - Barriers/wait-queues for thread synchronization.
-  - Recursive mutexes, notifiers for ITC, atomic ops for deadlock prevention.
-  - Input subsystem for event reporting.
-  - Scalable for multi-core systems.
+  - **File Operations/System Calls**: Sysfs, IRQ registration.
+  - **Library Functions**: devm_*, dev_err.
+  - **Blocking/Non-blocking**: wait_queue.
+  - **Atomic Operations**: atomic_inc/dec.
+  - **Race Conditions**: Lock ordering, try_lock.
+  - **Thread Synchronization**: Barriers, wait-queues, notifiers.
+  - **Process Management**: kthread_create/stop.
+  - **Memory Management**: kzalloc, vmalloc.
 
 ### mpu9250_fileops.c
-- **Purpose**: Implements file operations for `/dev/mpu9250`: open, release, read, write, ioctl, poll, mmap, and IRQ/workqueue handling.
+- **Purpose**: File operations for `/dev/mpu9250` (open/release, read/write, ioctl, poll, mmap).
 - **Key Features**:
-  - Char device interface for user-space access.
-  - Ioctl commands for sensor reads, calibration, thread control.
-  - Poll and mmap for asynchronous access and shared buffers.
+  - Blocking (wait_event) and non-blocking (poll, O_NONBLOCK) support.
+  - Ioctl for sensor/thread control.
+  - Mmap for FIFO buffer sharing.
 - **Knowledge Used**:
-  - Char device (cdev, class_create, device_create).
-  - Poll_table for non-blocking I/O.
-  - Remap_vmalloc_range for shared memory.
-  - Completion structs for event pairs.
-  - Spinlocks/rwlocks for safe data access.
-  - Workqueues for IRQ-driven reads.
-  - Provides robust user-space interface with concurrency safety.
-
-### mpu9250_ipc_test.c
-- **Purpose**: User-space test program for IPC mechanisms (message queues, shared memory, FIFO, pipes) with multi-threading and synchronization.
-- **Key Features**:
-  - Tests IPC with pthread-based thread pools.
-  - Supports signals, deferred cancellation, cleanup handlers.
-  - Implements publisher-subscriber via callbacks, barriers for sync.
-- **Knowledge Used**:
-  - Pthread APIs (create, join, detach, cancel).
-  - Semaphores for alternation/bounded waiting.
-  - Condition variables for producer-consumer.
-  - Notifiers/callbacks for publisher-subscriber.
-  - Map-reduce pattern (implicit via parallel data processing).
-  - Dining philosophers (semaphores for resource sync).
-  - Demonstrates scalable IPC testing.
-
-### user_space_test.c
-- **Purpose**: User-space test program for sensor data (accel, gyro, mag, DMP) with multi-threading and kernel interaction.
-- **Key Features**:
-  - Tests ioctl calls for sensor reads, scales, and thread control.
-  - Supports fork/exec, signals, and detached/joinable threads.
-  - Implements assembly line pipeline (read-convert-sync-output).
-- **Knowledge Used**:
-  - Similar to ipc_test but focused on kernel-user interaction.
-  - Pthread synchronization (barriers, monitors, rwlocks, recursive mutexes).
-  - Dining philosophers (semaphores for resource sync).
-  - Getopt for CLI parsing, mqueue for data transfer.
-  - Tests robust kernel-user communication.
+  - **File Operations/System Calls**: open, read, write, ioctl, poll, mmap.
+  - **Library Functions**: copy_to/from_user.
+  - **Blocking/Non-blocking**: wait_event, poll_wait.
+  - **Atomic Operations**: atomic_t flags.
+  - **Race Conditions**: Recursive mutex, rwlock, spinlock.
+  - **Thread Synchronization**: wait_queue, recursive_mutex.
+  - **Memory Management**: remap_vmalloc_range.
 
 ### mpu9250.dts
-- **Purpose**: Device Tree overlay for Raspberry Pi, configuring I2C1, GPIO interrupts, and power supplies.
+- **Purpose**: Device Tree overlay for MPU9250 on I2C bus.
 - **Key Features**:
-  - Enables I2C1 with MPU9250 at address 0x68, AK8963 at 0x0C.
-  - Configures interrupts (GPIO 17) and pinctrl.
-  - Dynamic overrides for I2C speed, scales, threading params (num_threads, semaphore_type).
+  - Enables I2C1, MPU9250 node (address, interrupt, magnetometer).
+  - Configures threading parameters.
 - **Knowledge Used**:
-  - Device Tree syntax (overlays, fragments, compatible strings).
-  - Pinctrl for GPIO configuration.
-  - Dynamic parameterization for flexible hardware setup.
-  - Allows hardware configuration without kernel recompilation.
+  - Device Tree syntax for hardware configuration.
+
+### mpu9250_ipc_test.c
+- **Purpose**: User-space test for IPC mechanisms with threading.
+- **Key Features**:
+  - Threads for message queue, shared memory, FIFO, pipe.
+  - Detached/joinable threads, command line arguments.
+- **Knowledge Used**:
+  - **File Operations/System Calls**: mq_open, shm_open, pipe, mkfifo.
+  - **Library Functions**: malloc, printf, getopt_long.
+  - **Blocking/Non-blocking**: sem_timedwait, non-blocking read.
+  - **Atomic Operations**: POSIX mutex/semaphore.
+  - **Race Conditions**: pthread_mutex_t, pthread_rwlock_t, pthread_barrier_t.
+  - **POSIX Threads**: pthread_create, pthread_exit, pthread_join, pthread_detach, pthread_self.
+  - **Thread Synchronization**: mutex, condition variables, rwlocks.
+  - **IPC**: Message queues, shared memory, semaphores, FIFO, pipes.
+  - **Process Management**: fork(), command line args.
+  - **Signals**: Handlers for SIGINT/TERM/SEGV, kill(SIGTERM).
+  - **Memory Management**: malloc/free, mmap.
+
+### user_space_test.c
+- **Purpose**: User-space test for sensor reading with multi-threading.
+- **Key Features**:
+  - Threads for accel, gyro, mag, DMP reads.
+  - Detached/joinable threads, command line arguments.
+- **Knowledge Used**:
+  - **File Operations/System Calls**: open, write, ioctl.
+  - **Library Functions**: malloc, printf, getopt_long.
+  - **Blocking Calls**: pthread_cond_wait, read/ioctl.
+  - **Race Conditions**: pthread_mutex_t, pthread_rwlock_t, pthread_barrier_t.
+  - **POSIX Threads**: pthread_create, pthread_exit, pthread_join, pthread_detach, pthread_self.
+  - **Thread Synchronization**: mutex, condition variables, rwlocks.
+  - **Process Management**: fork(), execl, command line args.
+  - **Signals**: Handlers for SIGINT/TERM/USR1.
+  - **Memory Management**: malloc/free, thread stacks.
 
 ### Makefile
-- **Purpose**: Build script for kernel module, user-space tests, DTB, and documentation.
+- **Purpose**: Build script for kernel module, user-space tests, DTB, documentation.
 - **Key Features**:
-  - Targets for kernel_module, user_progs, dtb, install, uninstall, clean, docs, thread_test.
-  - Supports cross-compilation and dependency checks.
-  - Valgrind/helgrind for concurrency testing.
+  - Compiles kernel module, user programs with GNU-GCC.
+  - Concurrency tests with valgrind/helgrind.
 - **Knowledge Used**:
-  - Linux kernel build system (obj-m, modules_install).
-  - Cross-compilation for ARM64 (Raspberry Pi).
-  - Dependency checks for pthread and kernel threading.
-  - Doxygen for documentation.
-  - Ensures reproducible builds and concurrency validation.
+  - **Compiling with GNU-GCC**: gcc with -pthread, -lrt.
+  - **Library Functions**: Links pthread, rt.
+  - **Process Management**: Supports cross-compilation.
 
 ## Build
 
@@ -158,7 +167,9 @@ make all
 To build specific components:
 - Kernel module: `make kernel_module`
 - Device tree overlay: `make dtb`
-- User-space tests: `make user_progs`
+- User-space tests: `make app`
+
+File run test DEMO: `user_space_test.c`, `mpu9250_ipc_test.c`.
 
 To run concurrency tests with valgrind/helgrind:
 
@@ -172,23 +183,21 @@ To generate Doxygen documentation:
 make docs
 ```
 
-To clean build artifacts (keep sources):
+To delete all files except artifacts and sources:
 
 ```bash
 make clean
 ```
 
-To clean everything except sources:
+To delete all files except sources:
 
 ```bash
 make cleanall
 ```
 
-Demo test files: `user_space_test.c` or `mpu9250_ipc_test.c`.
+## Install
 
-## Installation
-
-To install the MPU9250 driver on a Raspberry Pi, follow these steps. Ensure kernel headers are installed (`sudo apt install raspberrypi-kernel-headers`).
+To install the “mpu9250_driver” for the Raspberry Pi, follow these steps. Ensure kernel headers are installed (`sudo apt install raspberrypi-kernel-headers`).
 
 ### Step 1: Navigate to the /boot Directory
 ```bash
@@ -205,14 +214,14 @@ dtc -I dtb -O dts -o bcm2711-rpi-4-b.dts bcm2711-rpi-4-b.dtb
 **Note**: Replace `bcm2711-rpi-4-b.dtb` with the .dtb file for your Raspberry Pi model (e.g., `bcm2710-rpi-3-b.dtb` for Raspberry Pi 3).
 
 ### Step 3: Edit the Device Tree Source
-Open the .dts file (e.g., with `nano bcm2711-rpi-4-b.dts`). Locate the I2C-1 section (under `&i2c1`). Add or modify to include the MPU9250 configuration from `mpu9250.dts`:
-- Copy the `fragment@0` (I2C1 with mpu9250@68, AK8963 magnetometer).
+Open the .dts file (e.g., with `nano bcm2711-rpi-4-b.dts`). Locate the I2C-1 section (under `&i2c1`). Add the MPU9250 configuration from `mpu9250.dts`:
+- Copy `fragment@0` (I2C1 with mpu9250@68, AK8963 magnetometer).
 - Copy `fragment@1` (GPIO interrupt pin).
 - Copy `fragment@2` (pinctrl configuration).
 - Ensure `status = "okay";` for I2C1.
 
 ### Step 4: Recompile and Reboot
-Recompile the .dts file back to .dtb and reboot:
+Save changes, recompile the .dts file back to .dtb, and reboot:
 
 ```bash
 dtc -I dts -O dtb -o bcm2711-rpi-4-b.dtb bcm2711-rpi-4-b.dts
@@ -223,7 +232,7 @@ sudo reboot
 
 ### Step 5: Build and Install the Driver
 1. Ensure all source files (`mpu9250_driver.c`, `mpu9250_fileops.c`, `mpu9250_ops.c`, `mpu9250.h`, `Makefile`, `mpu9250.dts`) are in the same directory.
-2. Build the driver and DTB:
+2. Build the driver:
    ```bash
    make
    ```
@@ -253,61 +262,67 @@ sudo reboot
 
 ## Usage
 
-The driver creates `/dev/mpu9250` for user-space access. Use the following steps to interact with the sensor:
+The driver creates `/dev/mpu9250` for user-space access, supporting file operations, system calls, POSIX threads, and more. Below are steps to interact with the sensor:
 
-1. **Open Device**:
+1. **Open Device** (System Call: open):
    ```c
    int fd = open("/dev/mpu9250", O_RDWR);
    if (fd < 0) perror("Failed to open /dev/mpu9250");
    ```
 
-2. **Configure Scales and Sample Rate**:
+2. **Configure Scales and Sample Rate** (System Call: ioctl):
    ```c
    ioctl(fd, MPU9250_IOCTL_SET_ACCEL_SCALE, ACCEL_SCALE_2G);
    ioctl(fd, MPU9250_IOCTL_SET_GYRO_SCALE, GYRO_SCALE_250DPS);
    ioctl(fd, MPU9250_IOCTL_SET_SAMPLE_RATE, 100);
    ```
 
-3. **Read Sensor Data**:
+3. **Read Sensor Data** (System Calls: ioctl, read):
    ```c
    struct mpu9250_sensor_data data;
    ioctl(fd, MPU9250_IOCTL_READ_ACCEL, &data);
    printf("Accel: %.2f %.2f %.2f g\n", data.values[0], data.values[1], data.values[2]);
    ```
-   Similar ioctls for gyro (`MPU9250_IOCTL_READ_GYRO`), magnetometer (`MPU9250_IOCTL_READ_MAG`), and DMP quaternions (`MPU9250_IOCTL_READ_DMP`).
+   Use ioctls for gyro, magnetometer, DMP. Blocking read uses `read(fd, buf, len)`.
 
-4. **Thread Control**:
-   Pause/resume threads or set thread count:
+4. **Thread Control** (System Call: ioctl):
    ```c
    ioctl(fd, MPU9250_IOCTL_PAUSE_THREADS);
    ioctl(fd, MPU9250_IOCTL_SET_NUM_THREADS, 4);
+   ioctl(fd, MPU9250_IOCTL_RESUME_THREADS);
    ```
 
-5. **Run Tests**:
-   Compile and run user-space tests:
+5. **Run Tests** (Process Management, Signals, IPC, Threads):
    ```bash
-   ./user_space_test --accel --gyro --mag --dmp --sample-rate 100
-   ./mpu9250_ipc_test --mq --shm --fifo --pipe
+   ./user_space_test --accel --gyro --mag --dmp --sample-rate 100 --detach
+   ./mpu9250_ipc_test --mq --shm --fifo --pipe --detach --queue-size 10
+   ```
+   Tests use fork(), signals (SIGINT/TERM/USR1), POSIX threads, IPC (pipes, FIFO, message queues, semaphores, shared memory), and synchronization (mutex, condition variables, rwlocks).
+
+6. **Memory Mapping** (System Call: mmap):
+   ```c
+   void *fifo_map = mmap(NULL, MPU9250_MAX_FIFO, PROT_READ, MAP_SHARED, fd, 0);
+   munmap(fifo_map, MPU9250_MAX_FIFO);
    ```
 
 ## Expected Results
 
-When reading sensor values (e.g., via ioctl or test programs) with the MPU9250 at rest on a flat surface:
-- **Accelerometer**: ~[0.00, 0.00, 1.00] g (gravity on Z-axis, ±0.05g noise after calibration).
-- **Gyroscope**: ~[0.00, 0.00, 0.00] °/s (no rotation, ±0.1°/s noise).
-- **Magnetometer**: Varies by location, e.g., [X, Y, Z] in μT (Earth’s magnetic field ~25-65 μT, depends on calibration and environment).
-- **Quaternions (DMP)**: ~[1.00, 0.00, 0.00, 0.00] for identity orientation (no rotation).
+With the MPU9250 at rest on a flat surface:
+- **Accelerometer**: ~[0.00, 0.00, 1.00] g (±0.05g noise after calibration).
+- **Gyroscope**: ~[0.00, 0.00, 0.00] °/s (±0.1°/s noise).
+- **Magnetometer**: Varies, e.g., [X, Y, Z] in μT (~25-65 μT).
+- **Quaternions (DMP)**: ~[1.00, 0.00, 0.00, 0.00].
 
-Example output from `user_space_test` or callbacks:
+Example output:
 ```
 Callback: Accel: 0.02 0.01 0.98, Gyro: 0.05 -0.03 0.02, Mag: 30.50 42.10 -48.20, Quat: 1.00 0.00 0.00 0.00
 ```
 
 **Notes**:
-- Calibration (via `MPU9250_IOCTL_CALIBRATE`) adjusts offsets to minimize bias.
-- Errors like `-EIO` indicate I2C communication issues (check wiring or I2C address).
-- Data accuracy depends on sensor placement, calibration, and environmental factors (e.g., magnetic interference).
+- Calibration (`MPU9250_IOCTL_CALIBRATE`) uses dining philosophers for synchronization.
+- Errors like `-EIO` indicate I2C issues (check wiring/address).
+- Concurrency tests (valgrind/helgrind) confirm no races/deadlocks.
 
 ## License
 
-This project is licensed under the **GPL** (see `mpu9250_driver.c` for details). Author: Nguyen Nhan. Version: 2.3.
+Licensed under the **GPL** (see `mpu9250_driver.c`). Author: Nguyen Nhan. Version: 2.3.
