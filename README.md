@@ -45,6 +45,9 @@ The sensor communicates via I2C (default address 0x68) and is widely used in rob
 - **Component Diagram**
 <img width="6157" height="4378" alt="image" src="https://github.com/user-attachments/assets/57cf3fb8-a0e9-4bbe-83e0-3b09cdc34b82" />
 
+<img width="2970" height="346" alt="image" src="https://github.com/user-attachments/assets/41a6eb60-426f-4a03-b396-5e2f273461b5" />
+
+
 - **Sequence Diagram**
 <img width="1483" height="818" alt="image" src="https://github.com/user-attachments/assets/57271c44-e970-4c73-a26a-398f5d2a1346" />
 
