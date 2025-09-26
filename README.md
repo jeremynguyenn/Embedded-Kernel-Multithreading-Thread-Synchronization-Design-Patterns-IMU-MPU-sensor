@@ -37,6 +37,17 @@ The sensor communicates via I2C (default address 0x68) and is widely used in rob
 - **Memory Management**: Kernel allocations (vmalloc, kzalloc), user-space malloc/mmap, and memory segment management.
 - **Signals**: Signal handlers, sending signals, and default signal behaviors.
 
+## UML Diagram
+- **Class Diagram:**
+<img width="1604" height="1509" alt="image" src="https://github.com/user-attachments/assets/4d656f46-ba31-4d65-b768-aeafbdde79e6" />
+
+
+- **Component Diagram**
+<img width="6157" height="4378" alt="image" src="https://github.com/user-attachments/assets/57cf3fb8-a0e9-4bbe-83e0-3b09cdc34b82" />
+
+- **Sequence Diagram**
+<img width="1483" height="818" alt="image" src="https://github.com/user-attachments/assets/57271c44-e970-4c73-a26a-398f5d2a1346" />
+
 ## Code Structure
 
 The project consists of 8 files: 4 kernel driver files, 1 header, 2 user-space test programs, 1 Device Tree overlay, and 1 Makefile. Below is a breakdown of each file, covering file operations, system calls, library functions, compiling with GNU-GCC, blocking/non-blocking calls, atomic operations, race conditions, user/kernel mode process management, POSIX threads, thread synchronization, IPC, memory management, and signals.
