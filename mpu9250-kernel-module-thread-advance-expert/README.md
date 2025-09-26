@@ -65,68 +65,156 @@ The project includes kernel module source files and user-space test programs:
 
 ## Build
 
-1. **Prerequisites**:
-   - Raspberry Pi with Linux kernel headers installed (`/lib/modules/$(uname -r)/build`).
-   - Tools: `gcc`, `make`, `dtc`, `valgrind`, `doxygen`.
-   - Enable I2C in `/boot/config.txt`: `dtparam=i2c_arm=on`.
+To build all artifacts (kernel module, user programs, and device tree overlay) use:
 
-2. **Build Kernel Module and Tests**:
-   ```bash
-   make
-   ```
-   This compiles the kernel module (`mpu9250_driver.ko`) and user-space programs (`user_space_test`, `mpu9250_ipc_test`, `map_reduce_test`, `bridge_problem_test`, `assembly_line_test`, `vaccination_drive_test`).
+```bash
+make all
+```
 
-3. **Generate Documentation** (optional):
-   ```bash
-   make docs
-   ```
-   Creates Doxygen documentation in `doc/`.
+To build only specific components, use one of the following:
 
-4. **Check Dependencies**:
-   ```bash
-   make check_deps
-   ```
+```bash
+make kernel_module
+make dtb
+make user_progs
+```
 
-5. **Clean Build Artifacts**:
-   ```bash
-   make clean
-   ```
+To generate documentation (optional):
+
+```bash
+make docs
+```
+
+To check dependencies:
+
+```bash
+make check_deps
+```
+
+To delete all build artifacts:
+
+```bash
+make clean
+```
+
+To delete all files except sources:
+
+```bash
+make cleanall  # Note: Add this target to Makefile if needed
+```
+
+**Note**: Ensure kernel headers are installed (`/lib/modules/$(uname -r)/build`) and tools like `gcc`, `make`, `dtc`, `valgrind`, `doxygen` are available. No additional libraries beyond standard ones are required.
 
 ## Install
 
-1. **Install Kernel Module**:
-   ```bash
-   sudo make install
-   ```
-   This installs the kernel module to `/lib/modules/$(uname -r)/extra` and the device tree overlay to `/boot/overlays`.
+To install the MPU9250 driver for Raspberry Pi, follow these steps:
 
-2. **Load Device Tree Overlay**:
-   ```bash
-   sudo dtoverlay mpu9250.dtb
-   ```
+**Step 1**: Navigate to the `/boot` directory of the Raspberry Pi (optional if using the provided device tree overlay):
 
-3. **Load Kernel Module**:
-   ```bash
-   sudo insmod mpu9250_driver.ko
-   ```
-   Verify with `lsmod | grep mpu9250`. The device appears as `/dev/mpu9250`.
+```bash
+cd /boot
+```
 
-4. **Unload Kernel Module**:
-   ```bash
-   sudo rmmod mpu9250_driver
-   ```
+**Step 2**: If integrating the MPU9250 into the base device tree (instead of using the provided `mpu9250.dts` overlay), convert the Raspberry Pi device tree blob (.dtb) to a device tree source (.dts) file:
 
-5. **Remove Device Tree Overlay**:
-   ```bash
-   sudo dtoverlay -r mpu9250
-   ```
+```bash
+dtc -I dtb -O dts -o bcm2710-rpi-3-b.dts bcm2710-rpi-3-b.dtb
+```
 
-6. **Uninstall Everything**:
-   ```bash
-   sudo make uninstall
-   ```
+**Note**: Replace `bcm2710-rpi-3-b.dtb` with the appropriate .dtb file for your Raspberry Pi model (e.g., `bcm2711-rpi-4-b.dtb` for Pi 4). Ensure compatibility with your model.
 
-**Note**: Connect MPU9250 to I2C pins (GPIO 2/3 for SDA/SCL on Raspberry Pi) and interrupt pin to GPIO 17. Ensure I2C is enabled in `/boot/config.txt`.
+**Step 3**: Open the generated .dts file (e.g., `bcm2710-rpi-3-b.dts`) and locate the I2C-1 section (e.g., `i2c1`). Add or modify the MPU9250 node to match the configuration in `mpu9250.dts`, for example:
+
+```dts
+mpu9250@68 {
+    compatible = "invensense,mpu9250";
+    reg = <0x68>;
+    interrupt-parent = <&gpio>;
+    interrupts = <17 0x2>;
+    pinctrl-names = "default";
+    pinctrl-0 = <&mpu9250_pins>;
+    status = "okay";
+};
+```
+
+Save the changes.
+
+**Step 4**: Recompile the .dts file back to .dtb and reboot the Raspberry Pi:
+
+```bash
+dtc -I dts -O dtb -o bcm2710-rpi-3-b.dtb bcm2710-rpi-3-b.dts
+sudo reboot
+```
+
+**Preferred Method (Using Device Tree Overlay)**: The project includes `mpu9250.dts` as a pre-configured overlay, making manual .dts editing unnecessary in most cases. Instead:
+
+- Build the overlay:
+
+```bash
+make dtb
+```
+
+- Copy to overlays:
+
+```bash
+sudo cp mpu9250.dtb /boot/overlays/mpu9250.dtbo
+```
+
+- Apply overlay:
+
+```bash
+sudo dtoverlay mpu9250
+```
+
+- To remove overlay:
+
+```bash
+sudo dtoverlay -r mpu9250
+```
+
+**Step 5**: Build and Install the Driver
+
+- Ensure the source files and `Makefile` are in the same folder. Build the kernel module:
+
+```bash
+make kernel_module
+```
+
+- This generates `mpu9250_driver.ko` (and related .ko files for `mpu9250_fileops.o`, etc.).
+
+- Install the driver:
+
+```bash
+sudo make install
+```
+
+- This installs modules to `/lib/modules/$(uname -r)/extra`, copies `mpu9250.dtbo` to `/boot/overlays`, and runs `depmod -a`.
+
+- Load the module:
+
+```bash
+sudo insmod mpu9250_driver.ko
+```
+
+- Alternatively, after `make install`, use:
+
+```bash
+sudo modprobe mpu9250_driver
+```
+
+- Check installation status:
+
+```bash
+dmesg | grep mpu9250
+```
+
+- To remove the module:
+
+```bash
+sudo rmmod mpu9250_driver
+```
+
+**Note**: Ensure I2C is enabled in `/boot/config.txt` with `dtparam=i2c_arm=on`. Connect the MPU9250 to GPIO 2/3 (SDA/SCL) and GPIO 17 (interrupt). The device appears as `/dev/mpu9250`.
 
 ## Usage
 
@@ -212,9 +300,9 @@ Callback: Accel: 0.02 0.01 0.98, Gyro: 0.05 -0.03 0.02, Mag: 30.50 42.10 -48.20,
 
 **Notes**:
 - Calibration uses dining philosophers for resource synchronization to prevent deadlocks.
-- Errors like `-EIO` indicate I2C communication issues (check wiring, I2C address, or device tree).
+- Errors like `-EIO` indicate I2C communication issues (check wiring, I2C address 0x68, or device tree).
 - Concurrency tests (`make thread_test`) confirm thread safety with Valgrind/Helgrind.
-- Some tests (e.g., `map_reduce_test`, `assembly_line_test`) may show incomplete data due to threading issues (e.g., incorrect thread ID calculation); see code comments for fixes.
+- Some tests (e.g., `map_reduce_test`, `assembly_line_test`) may show incomplete data due to threading issues (e.g., incorrect thread ID calculation); see code for fixes.
 
 ## License
 
