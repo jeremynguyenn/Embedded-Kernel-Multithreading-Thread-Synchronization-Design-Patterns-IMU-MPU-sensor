@@ -1,4 +1,4 @@
-# MPU9250 Kernel Driver for Raspberry Pi (RUN follow the file mpu9250-kernel-module-thread-advance-update)
+# MPU9250 Kernel Driver for Raspberry Pi (RUN follow the file mpu9250-kernel-module-thread-advance-expert)
 
 This project provides a Linux kernel driver for the **MPU9250**, a 9-axis MotionTracking device from Invensense (now TDK), tailored for Raspberry Pi. The MPU9250 integrates a 3-axis accelerometer, 3-axis gyroscope, and 3-axis magnetometer, ideal for motion sensing, orientation detection, and navigation in embedded systems like drones, wearables, and IoT devices. The driver leverages I2C communication and incorporates advanced concurrency, synchronization, file operations, system calls, library functions, blocking/non-blocking calls, atomic operations, race condition handling, user/kernel mode process management, POSIX threads, thread synchronization, inter-process communication (IPC), memory management, and signal handling.
 
